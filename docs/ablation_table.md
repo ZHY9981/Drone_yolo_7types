@@ -17,12 +17,11 @@
 | V14.0 | P3+P4 dual-head, imgsz=960 | 73.71% | **52.65%** | 6.82M | Peak mAP@0.5:0.95 |
 | **V16.0** | **P3+P4 + per-scale CoordAtt, imgsz=800** | **74.00%** | 52.11% | **7.03M** | **Best (Production)** |
 | V17.0 | + P4 RepNCSPELAN4 | 73.52% | 51.27% | — | Neutral |
-| V18.0 | + ECA / ASFF experiments | — | — | — | Neutral |
-| V19.0 | P4 wide channel 256→384 | — | — | — | Neutral |
+| V18.0 | + ECA / ASFF experiments | 72.91% | 50.84% | — | Neutral |
+| V19.0 | P4 wide channel 256→384 | 73.44% | 51.63% | — | Neutral |
 | V20.0 | P3+P4+P5 triple-head (clean) | 73.29% | 50.41% | 8.06M | Neutral |
 
-> V15 (BiFPN P5) and earlier experiments (V1–V6) are omitted from this summary.
-> Full per-version records are available in the project's version archive.
+> V15 (BiFPN P5, 72.85% / 50.18%) and earlier experiments (V1–V6) are in the version archive.
 
 ## Per-Class Breakdown (V16.0 — Best Model)
 
@@ -65,8 +64,11 @@ Evaluated on aerial_v9 validation set (2,224 images), RTX 5060 8GB, imgsz=800, F
 
 ## Open Problems
 
-- **Car detection (67.3%)** lags small-object classes on V16. Current work explores
-  SimOTA center-prior and SGLoss-style adaptive grid selection to recover P2 head
-  benefits without OOM.
+- **Person/cycle recall (50.9% / 36.3%)**: The two hardest classes have the lowest AP50-95
+  (24.7% / 17.6%), suggesting small-object localization remains the bottleneck. Current
+  work explores SimOTA center-prior and SGLoss-style adaptive grid selection.
+- **Car detection (67.3%)** lags bus/truck despite car having 69,840 training instances.
+  Removing P5 disproportionately impacted car (V12 triple-head: car ~71%); the 3-head V20
+  partially recovers this but at the cost of person/cycle regression.
 - **Freight / small-bus** (< 2% of instances each) remain challenging due to extreme
   class imbalance; potential directions include few-shot augmentation or soft-labeling.

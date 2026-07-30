@@ -1,18 +1,17 @@
 # aerial_v9 — Custom Aerial Detection Dataset
 # ============================================
-# 来源：从公开航拍数据集筛选整理而成
+# Sources: curated from public aerial datasets
 #   - aerial.v1i (CC BY 4.0)
 #   - Aerial Vehicle Detection (MIT)
 #   - aerial.v3i (MIT)
 #
-# 7 类：person, cycle, bus, small-bus, car, truck, freight
+# 7 classes: person, cycle, bus, small-bus, car, truck, freight
 #
-# 注意：数据集体量较大（~10 GB），因许可原因不开源。
-# 如需获取，请联系仓库所有者。
-#
-# 若本地已有数据集，修改下方 path 指向实际目录即可。
+# Note: dataset is ~10 GB and not open-sourced in this repo
+# due to license terms. Contact the owner for access.
+# If you already have the dataset locally, update 'path' below.
 
-path: /path/to/aerial_v9    # 改为你的本地路径
+path: /path/to/aerial_v9    # ← update to your local path
 train: train/images
 val: valid/images
 test: test/images
