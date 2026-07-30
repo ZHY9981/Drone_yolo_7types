@@ -75,7 +75,7 @@ All modifications are applied on top of a customized Ultralytics 8.4.12 fork.
 | Dataset | Images | Classes | Source |
 |---------|--------|---------|--------|
 | aerial_v9 (custom) | 8,075 train / 2,224 val / 738 test | 7 | Curated from public aerial datasets, cleaned of label noise |
-| VisDrone2019 (benchmark) | 6,471 train / 548 val | 10 | Official benchmark (comparison only) |
+| aerial_v8 (early) | 3,800 train | 7 | Public aerial datasets, superseded by aerial_v9 (V8.0–V9.0 baseline) |
 
 > **Dataset availability**: aerial_v9 is curated from public aerial datasets (aerial.v1i CC BY 4.0,
 > Aerial Vehicle Detection MIT, aerial.v3i MIT). Due to license terms and total size (~10 GB),
