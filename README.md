@@ -26,20 +26,20 @@ ablation experiments.
 | Parameters | **7.03 M** | V16 |
 | Precision | **81.3%** | V16 validation |
 | Recall | **67.6%** | V16 validation |
-| Inference | TBD | RTX 5060 8 GB, imgsz=800 (benchmark pending) |
+| Inference | **4.0 ms** | RTX 5060 8 GB, imgsz=800, FP16 (avg over 2224 val images) |
 
 ### V16.0 Per-Class Performance
 
-| Class | AP50 | Precision | Recall |
-|:------|:----:|:---------:|:------:|
-| person | 60.2% | — | — |
-| cycle | 42.9% | — | — |
-| bus | 91.8% | — | — |
-| small-bus | 99.2% | — | — |
-| car | 67.3% | — | — |
-| truck | 60.0% | — | — |
-| freight | 96.6% | — | — |
-| **Overall** | **74.0%** | **81.3%** | **67.6%** |
+| Class | AP50 | AP50-95 | Precision | Recall |
+|:------|:----:|:-------:|:---------:|:------:|
+| person | 60.2% | 24.7% | 77.7% | 50.9% |
+| cycle | 43.0% | 17.6% | 67.0% | 36.3% |
+| bus | 91.8% | 74.5% | 91.3% | 86.3% |
+| small-bus | 99.2% | 83.3% | 92.3% | 99.4% |
+| car | 67.2% | 47.3% | 87.2% | 51.4% |
+| truck | 60.0% | 41.0% | 63.8% | 53.6% |
+| freight | 96.6% | 76.6% | 89.8% | 95.0% |
+| **Overall** | **74.0%** | **52.1%** | **81.3%** | **67.6%** |
 
 Training: 200 epochs, ~16.6h on RTX 5060 8GB. E120=72.9%, final 80 epochs contribute +1.15pp — CoordAtt benefits from extended convergence.
 

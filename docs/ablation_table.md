@@ -26,17 +26,20 @@
 
 ## Per-Class Breakdown (V16.0 — Best Model)
 
-| Class | AP50 | AP50-95 |
-|:------|:----:|:-------:|
-| person | 60.2% | — |
-| cycle | 42.9% | — |
-| bus | — | — |
-| small-bus | — | — |
-| car | 67.3% | — |
-| truck | — | — |
-| freight | — | — |
+Evaluated on aerial_v9 validation set (2,224 images), RTX 5060 8GB, imgsz=800, FP16.
 
-> Detailed per-class metrics from evaluation output; run `scripts/eval.py` to reproduce.
+| Class | AP50 | AP50-95 | Precision | Recall |
+|:------|:----:|:-------:|:---------:|:------:|
+| person | 60.2% | 24.7% | 77.7% | 50.9% |
+| cycle | 43.0% | 17.6% | 67.0% | 36.3% |
+| bus | 91.8% | 74.5% | 91.3% | 86.3% |
+| small-bus | 99.2% | 83.3% | 92.3% | 99.4% |
+| car | 67.2% | 47.3% | 87.2% | 51.4% |
+| truck | 60.0% | 41.0% | 63.8% | 53.6% |
+| freight | 96.6% | 76.6% | 89.8% | 95.0% |
+| **Overall** | **74.0%** | **52.1%** | **81.3%** | **67.6%** |
+
+> Run `scripts/eval.py --weights V16.0/best.pt --data data/data.yaml` to reproduce.
 
 ## Failed Experiments (Honest Record)
 
