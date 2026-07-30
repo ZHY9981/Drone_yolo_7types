@@ -2,8 +2,8 @@
 YOLO26s V16 — Train Best Production Model (P3+P4 Dual-Head + CoordAtt)
 ======================================================================
 Architecture: P3+P4 dual-head + per-scale CoordAtt, imgsz=800
-Hardware:    RTX 5060 Laptop 8GB VRAM, batch=4
-Training:    ~16.6 hours, 200 epochs
+Hardware:     RTX 5060 Laptop 8GB VRAM, batch=4
+Training:     ~16.6 hours, 200 epochs
 
 Usage:
     conda activate yolo_new
@@ -11,7 +11,8 @@ Usage:
 
 Requires:
     - data.yaml pointing to your aerial_v9 dataset
-    - Ultralytics fork with CoordAtt module (yolo26s-v16-p34-coordatt.yaml)
+    - Ultralytics fork with CoordAtt module (see patches/)
+    - Model config: configs/yolo26s-v16-p34-coordatt.yaml
 """
 import torch
 
@@ -77,6 +78,6 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 60)
     print("V16 (Best / Production) training complete!")
-    print(f"mAP50: {results.results_dict.get('mAP50', 'N/A'):.2%}")
-    print(f"mAP50-95: {results.results_dict.get('mAP50-95', 'N/A'):.2%}")
+    print(f"mAP50:   {results.results_dict.get('mAP50', 'N/A')}")
+    print(f"mAP50-95:{results.results_dict.get('mAP50-95', 'N/A')}")
     print("=" * 60)

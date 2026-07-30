@@ -67,8 +67,14 @@ def parse_args():
     parser.add_argument(
         "--half",
         action="store_true",
+        default=False,
+        help="Use FP16 inference (default: False)",
+    )
+    parser.add_argument(
+        "--no-half",
+        action="store_true",
         default=True,
-        help="Use FP16 inference",
+        help="Use FP32 inference (overrides --half)",
     )
     parser.add_argument(
         "--name",
@@ -82,9 +88,13 @@ def parse_args():
 def main():
     args = parse_args()
 
+    # Resolve half flag: --no-half takes precedence
+    use_half = args.half and not args.no_half
+
     print("=" * 60)
     print(f"Evaluating: {args.weights}")
-    print(f"Dataset: {args.data}")
+    print(f"Dataset:   {args.data}")
+    print(f"FP16:      {use_half}")
     print("=" * 60)
 
     model = YOLO(args.weights)
@@ -96,7 +106,7 @@ def main():
         conf=args.conf,
         iou=args.iou,
         device=args.device,
-        half=args.half,
+        half=use_half,
         plots=True,
         name=args.name,
         exist_ok=True,
@@ -104,10 +114,10 @@ def main():
 
     print("\n" + "=" * 60)
     print("Evaluation complete!")
-    print(f"mAP50:    {results.box.map50:.2%}")
-    print(f"mAP50-95: {results.box.map:.2%}")
-    print(f"Precision:{results.box.mp:.2%}")
-    print(f"Recall:   {results.box.mr:.2%}")
+    print(f"mAP50:     {results.box.map50:.2%}")
+    print(f"mAP50-95:  {results.box.map:.2%}")
+    print(f"Precision: {results.box.mp:.2%}")
+    print(f"Recall:    {results.box.mr:.2%}")
 
     if hasattr(results, "ap_class_index") and hasattr(results, "class_map"):
         print("\nPer-class metrics:")

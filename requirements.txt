@@ -1,8 +1,14 @@
 # YOLO26s Aerial Detection — Dependencies
 # =========================================
 # Install with: pip install -r requirements.txt
-# Requires custom Ultralytics fork with CoordAtt module (see docs/ for details)
-ultralytics==8.4.12
+#
+# IMPORTANT: This project uses a CUSTOM fork of ultralytics==8.4.12
+# with CoordAtt, WIoU v3, and TAL 4px modifications.
+# See patches/ for modification details.
+# Until the fork is released, apply patches manually or use:
+#   pip install ultralytics==8.4.12
+#   Then apply patches from patches/ to the installed package.
+
 torch>=2.1.0
 torchvision>=0.16.0
 numpy>=1.24.0
@@ -12,4 +18,7 @@ pandas>=2.0.0
 tqdm>=4.65.0
 pyyaml>=6.0
 seaborn>=0.12.0
-lapx>=0.5.5
+lap>=0.5.5
+
+# Optional — for GPU acceleration, install PyTorch with CUDA:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118

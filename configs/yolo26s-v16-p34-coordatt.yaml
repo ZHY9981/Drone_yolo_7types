@@ -1,37 +1,34 @@
-# YOLO26s V16 — P3+P4 双检测头 + Per-Scale CoordAtt (Best / Production)
-# =====================================================================
-# 最佳生产模型：在 RTX 5060 8GB 约束下，精度 - 参数量 - 显存三方面最优。
-#
-# 改动 (vs V14 双头基线):
-#   1. 删除 P5 骨干 CoordAtt — P5检测头已删，P5层CoordAtt信号经两次上采样
-#      才到P3/P4, 效率极低，移除后P5只做特征提取(SPPF→C2PSA)
+# YOLO26s V16 — P3+P4 双检测头 + Per-Scale CoordAtt
+# ====================================================
+# 改动 (vs V14):
+#   1. 删除 P5 骨干 CoordAtt — P5检测头已删, P5层的CoordAtt信号经两次上采样
+#      才到P3/P4, 效率极低, 移除后P5只做特征提取(SPPF→C2PSA)
 #   2. P3 检测头前新增 CoordAtt[32] — 直接增强120×120空间注意力
 #   3. P4 检测头前新增 CoordAtt[32] — 直接增强60×60空间注意力
-#   4. car weight 1.3→1.8, truck weight 1.0→1.3 (在 loss.py 中配置)
+#   4. car weight 1.3→1.8, truck weight 1.0→1.3 (在loss.py中配置)
 #
-# 继承 V14:
-#   - imgsz=800, TAL stride=4px, class weight person×2/cycle×3
-#   - P3(256ch)+P4(512ch) 双头, 无 P5 检测头
-#   - WIoU v3, scale=0.3, close_mosaic=10
+# 设计逻辑:
+#   - V15证明: 128ch压缩P5无法恢复car, 感受野不是根因
+#   - car漏检根因重定位: P4特征表达不足
+#   - 每尺度独立CoordAtt > 单个共享CoordAtt(跨FPN衰减)
 #
-# 结果: mAP50=74.00%, mAP50-95=52.11%, Params=7.03M
-#
-# References:
-#   - CoordAtt: https://arxiv.org/abs/2103.02907
-#   - WIoU v3:  https://arxiv.org/abs/2301.10051
+# 继承V14:
+#   - imgsz=960, TAL stride=4px, class weight person×2/cycle×3
+#   - P3(256ch)+P4(512ch)双头, 无P5检测头
+#   - WIoUv3, E2ELoss, scale=0.3, close_mosaic=10
 
 # Parameters
-nc: 7            # number of classes
+nc: 7 # number of classes
 end2end: True
 reg_max: 1
 scales:
   n: [0.50, 0.25, 1024]
-  s: [0.50, 0.50, 1024]  # ← s scale used by YOLO26s
+  s: [0.50, 0.50, 1024]
   m: [0.50, 1.00, 512]
   l: [1.00, 1.00, 512]
   x: [1.00, 1.50, 512]
 
-# Backbone — P5层做纯特征提取，无CoordAtt
+# Backbone — P5层做纯特征提取, 无CoordAtt
 backbone:
   - [-1, 1, Conv, [64, 3, 2]]         # 0-P1/2
   - [-1, 1, Conv, [128, 3, 2]]        # 1-P2/4
@@ -43,9 +40,9 @@ backbone:
   - [-1, 1, Conv, [1024, 3, 2]]       # 7-P5/32
   - [-1, 2, C3k2, [1024, True]]        # 8
   - [-1, 1, SPPF, [1024, 5, 3, True]]  # 9
-  - [-1, 2, C2PSA, [1024]]             # 10
+  - [-1, 2, C2PSA, [1024]]             # 10 — CoordAtt删除, SPPF直连C2PSA
 
-# Head — P3+P4 双头，各带独立 CoordAtt
+# Head — P3+P4双头, 各带独立CoordAtt
 head:
   # --- FPN: P5→P4 ---
   - [-1, 1, nn.Upsample, [None, 2, "nearest"]]    # 11
@@ -65,4 +62,4 @@ head:
   - [-1, 1, CoordAtt, [32]]                         # 21 ⭐ P4专属 CoordAtt
 
   # --- Detect ---
-  - [[17, 21], 1, Detect, [nc]]                      # 22 P3(17)+P4(21) 双头
+  - [[17, 21], 1, Detect, [nc]]                      # 22 P3(17)+P4(21)双头

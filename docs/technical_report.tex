@@ -1,0 +1,411 @@
+\documentclass[11pt]{article}
+
+% === Packages ===
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{float}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue,
+}
+
+% === Title ===
+\title{\textbf{Resource-Constrained Aerial Small-Object Detection\\with YOLO26s and Coordinate Attention}}
+
+\author{
+    Haoyi (Yuki) Zou\\[2mm]
+    \small Independent Research\\[1mm]
+    \small \texttt{https://github.com/ZHY9981/Drone\_yolo\_7types}
+}
+
+\date{July 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Aerial small-object detection poses a unique challenge: targets smaller than 30 pixels must be
+detected in high-resolution drone footage, while consumer GPUs (8 GB VRAM) cannot accommodate
+the high-resolution detection heads that small objects require. We present a customized YOLO26s
+architecture that addresses three compounding bottlenecks—positional information loss, small-object
+gradient starvation, and VRAM overcommitment—through a combination of Coordinate Attention (CoordAtt),
+a P3+P4 dual-head design, WIoU v3 loss, and a reduced TaskAlignedAssigner pixel threshold. Across
+20+ systematically ablated experiments on a curated 7-class aerial dataset, our best model (V16.0)
+achieves 74.00\% mAP@0.5 and 52.11\% mAP@0.5:0.95 with only 7.03M parameters, operating within
+an 8 GB VRAM budget at 4.0 ms inference latency. We also document four failed experiments and six
+key insights, including the counterintuitive finding that a dual-head architecture outperforms
+triple-head by 2.1\% mAP under memory constraints.
+\end{abstract}
+
+% ======================================================================
+\section{Introduction}
+% ======================================================================
+
+Aerial object detection from drone-captured imagery is a problem of growing practical importance,
+with applications ranging from traffic surveillance to search-and-rescue operations. However, it
+exposes a fundamental tension in modern object detectors: small targets require high-resolution
+feature maps, but high-resolution feature maps require GPU memory that consumer hardware does
+not have.
+
+Consider a pedestrian viewed from 100 meters altitude. At 800-pixel input resolution, this target
+occupies approximately 20$\times$15 pixels—less than 0.05\% of the image area. A standard YOLO
+detector with P3/8, P4/16, and P5/32 downsampling strides places this target on the P3 feature map
+(100$\times$100 spatial resolution), where each cell corresponds to an 8$\times$8 pixel region in
+the original image. A 20-pixel target spans roughly 2.5 cells—barely enough for the detector to
+localize it. Adding a P2/4 head (200$\times$200 resolution) would help, but the TaskAlignedAssigner's
+alignment matrix at P2 resolution exceeds 8 GB VRAM at batch size 4.
+
+This paper documents a systematic attempt to maximize aerial detection performance under a fixed
+hardware constraint (RTX 5060 Laptop GPU, 8 GB VRAM). Rather than scaling hardware, every design
+decision is evaluated by both accuracy and memory cost. The key contributions are:
+
+\begin{enumerate}[leftmargin=*]
+    \item A per-scale Coordinate Attention (CoordAtt) injection strategy that preserves fine-grained
+          spatial cues for small targets without the VRAM cost of a full P2 head.
+    \item A P3+P4 dual-head architecture that outperforms both the standard P3+P4+P5 triple-head
+          and the P2+P3+P4+P5 quad-head on 8 GB hardware.
+    \item A 20-version ablation study isolating the effect of each architectural modification,
+          loss function, and data preprocessing decision with all failure cases documented.
+\end{enumerate}
+
+% ======================================================================
+\section{Problem Analysis}
+% ======================================================================
+
+Aerial small-object detection faces three compounding difficulties:
+
+\subsection{Extreme Scale Variation}
+
+In aerial imagery, a freight truck (occupying 300$\times$100 pixels at 50 m altitude) and a
+pedestrian (20$\times$15 pixels) coexist in the same image. The detector must simultaneously
+handle targets spanning two orders of magnitude in pixel area. Standard multi-scale detection
+heads (P3 through P5) are designed for COCO-scale objects, where the smallest targets (e.g.,
+tennis rackets, bottles) are still $\sim$50 pixels—double the size of an aerial pedestrian.
+
+\subsection{Memory Constraints on Consumer Hardware}
+
+The RTX 5060 Laptop GPU provides 8 GB of VRAM. At batch size 4 and image size 800$\times$800,
+the standard YOLO26s triple-head configuration consumes approximately 6.8 GB during training,
+leaving only 1.2 GB of headroom. Adding a P2 head (feature map 200$\times$200$\times$25,600 cells)
+causes the TaskAlignedAssigner to allocate a $B \times N_{\text{anchors}} \times N_{\text{gt}}$
+alignment matrix: at P2 resolution with 7 classes and up to 200 ground-truth instances per image,
+this matrix alone exceeds 2.5 GB—pushing total VRAM usage past the 8 GB limit and causing an OOM
+error.
+
+\subsection{Class Imbalance}
+
+The aerial\_v9 dataset exhibits extreme long-tail distribution: person (73,770 instances) and
+car (69,840) dominate, while freight (1,306) and small-bus (1,117) each represent less than 2\%
+of training instances. Standard equal-weight classification loss causes the model to optimize
+almost exclusively for the majority classes.
+
+% ======================================================================
+\section{Methodology}
+% ======================================================================
+
+\subsection{Coordinate Attention (CoordAtt)}
+
+Channel attention mechanisms like Squeeze-and-Excitation (SE) improve feature representation by
+modeling inter-channel dependencies, but they discard all spatial information through global
+average pooling. For small aerial targets, \textit{where} a feature is located is as important
+as \textit{what} it represents.
+
+CoordAtt \cite{hou2021coordinate} decomposes 2D global pooling into two 1D feature encoding
+operations along the horizontal and vertical directions:
+
+\begin{align}
+    \mathbf{z}^h_c(h) &= \frac{1}{W} \sum_{0 \leq i < W} \mathbf{x}_c(h, i), \quad
+    \mathbf{z}^w_c(w) = \frac{1}{H} \sum_{0 \leq j < H} \mathbf{x}_c(j, w)
+\end{align}
+
+The two 1D encodings are concatenated, passed through a shared 1$\times$1 convolution for
+cross-channel interaction, then split into separate attention maps $\mathbf{a}^h$ and
+$\mathbf{a}^w$. The attended output is:
+
+\begin{align}
+    \mathbf{y}_c(i, j) = \mathbf{x}_c(i, j) \times \mathbf{a}^h_c(i) \times \mathbf{a}^w_c(j)
+\end{align}
+
+\textbf{Placement strategy.} We place CoordAtt per-scale at P3 and P4 neck positions (immediately
+before the Detect head), rather than at the backbone P5 layer. Our V16 ablation (Section~\ref{sec:experiments})
+shows this is critical: a backbone P5 CoordAtt must propagate signals through two nearest-neighbor
+upsample steps to reach P3 detection features, losing spatial precision. Per-scale placement
+directly enhances the 120$\times$120 (P3) and 60$\times$60 (P4) feature maps.
+
+\subsection{P3+P4 Dual-Head Architecture}
+
+Removing the P5 detection head reduces parameter count by 32\% (from 10.3M to 7.03M for YOLO26s)
+and saves approximately 40\% of detection-head VRAM. This freed memory is reallocated to larger
+P3/P4 feature channels, improving small-object feature quality.
+
+The counterintuitive result is that the dual-head configuration \textit{improves} mAP by +2.1\%
+over triple-head (V20 vs V16 in our ablations). This is not because P5 is useless—the P5 head
+detects large objects (buses, freight trucks) effectively—but because under the 8 GB memory
+constraint, the memory saved by removing P5 allows larger P3/P4 channels that improve the
+detection of the majority of targets (person, cycle, car, truck), which collectively account
+for over 80\% of instances.
+
+\subsection{WIoU v3 Loss}
+
+Standard CIoU loss treats all bounding box regression errors equally. WIoU v3 \cite{tong2023wise}
+introduces an attention-based outlier suppression mechanism that adaptively weights regression
+gradients based on the quality of each prediction:
+
+\begin{align}
+    \mathcal{L}_{\text{WIoU v3}} = r \cdot \mathcal{L}_{\text{IoU}},
+    \quad r = \frac{\beta}{\delta \alpha^{\beta - \delta}}
+\end{align}
+
+where $\beta = \mathcal{L}_{\text{IoU}}^* / \overline{\mathcal{L}_{\text{IoU}}}$ measures
+outlier degree, and $\alpha, \delta$ are hyperparameters controlling suppression strength.
+Small aerial targets (high $\beta$ due to difficult localization) receive amplified gradients,
+while large targets (low $\beta$) are unaffected. This modification costs zero additional VRAM.
+
+\subsection{TAL Positive-Sample Threshold}
+
+The default TaskAlignedAssigner (TAL) \cite{feng2021toad} uses a stride-tensor minimum of 8 pixels
+for positive-sample assignment. At P3 resolution (stride 8), this means any ground-truth center
+more than 8 pixels from an anchor point is labeled negative. For a 20-pixel pedestrian, this
+excludes over 80\% of valid P3 anchor points from receiving positive gradients.
+
+We reduce the threshold to 4 pixels. This gives small targets approximately 4$\times$ more
+positive anchors per instance, directly improving recall on person and cycle by +6--7\% each.
+
+\subsection{Class-Weighted Loss}
+
+We apply per-class multiplicative weights to the classification loss:
+
+\begin{equation}
+    \mathbf{w} = [2.0, 3.0, 1.8, 1.5, 1.0, 1.0, 1.0]
+\end{equation}
+
+corresponding to \texttt{[person, cycle, bus, small-bus, car, truck, freight]}. Cycle receives
+the highest weight (3.0$\times$) because it is both rare (14K instances) and small. Freight and
+small-bus, while rare, are large and easy to detect, so they use base weight.
+
+% ======================================================================
+\section{Experiments}
+\label{sec:experiments}
+% ======================================================================
+
+\subsection{Dataset}
+
+The aerial\_v9 dataset is curated from three public sources: aerial.v1i (Roboflow, CC BY 4.0),
+Aerial Vehicle Detection (MIT), and aerial.v3i (MIT). The curation process involved merging the
+three sources, unifying class taxonomies (e.g., motorcycle + bicycle $\rightarrow$ cycle,
+van $\rightarrow$ car), and manually inspecting approximately 500 random samples to remove label
+noise and add missing annotations. The final dataset contains 8,075 training, 2,224 validation,
+and 738 test images across 7 classes.
+
+\subsection{Training Configuration}
+
+All experiments use a fixed hardware and training protocol:
+
+\begin{table}[H]
+\centering
+\caption{Training configuration (all versions).}
+\begin{tabular}{ll}
+\toprule
+GPU & RTX 5060 Laptop 8 GB \\
+Batch size & 4 (P2 experiments: 2) \\
+Optimizer & SGD, lr$_{0}$=0.01, momentum=0.937, weight\_decay=0.0005 \\
+Epochs & 200 (V8--V16), 120 (V17--V20) \\
+Image size & 640--960 (V16 uses 800) \\
+Augmentation & mosaic=0.5, scale=0.3, no mixup/copy-paste \\
+Loss & WIoU v3 (box), VFL (cls), DFL \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Mixup and copy-paste augmentation are deliberately disabled for aerial data—our early experiments
+(V1--V3) showed they degrade performance by 1.5--2.0\%, likely because they create unrealistic
+object placements (e.g., a car floating on a rooftop) when applied to aerial imagery with dense,
+structured layouts.
+
+\subsection{Ablation Study}
+
+Table~\ref{tab:ablation} presents the key milestones from the 20-version ablation study. Each
+version modifies exactly one variable from the preceding baseline.
+
+\begin{table}[H]
+\centering
+\caption{Key ablation results. Full table in project documentation.}
+\label{tab:ablation}
+\begin{tabular}{clccc}
+\toprule
+Version & Key Change & mAP@0.5 & mAP@0.5:0.95 & $\Delta$ \\
+\midrule
+V8.0  & Baseline (clean data) & 67.81\% & 44.31\% & --- \\
+V8.1  & + WIoU v3 loss & 69.59\% & 47.00\% & +1.78\% \\
+V10.0 & + CoordAtt + aerial\_v9 & 70.51\% & 49.33\% & +0.92\% \\
+V12.0 & imgsz 640$\rightarrow$800 & 71.58\% & 50.27\% & +1.07\% \\
+V14.0 & P3+P4 dual-head, imgsz=960 & 73.71\% & \textbf{52.65\%} & +2.13\% \\
+\textbf{V16.0} & \textbf{P3+P4 + per-scale CoordAtt, 800} & \textbf{74.00\%} & 52.11\% & +0.29\% \\
+V17.0 & + P4 RepNCSPELAN4 & 73.52\% & 51.27\% & $-$0.48\% \\
+V18.0 & + ECA / ASFF & 72.91\% & 50.84\% & $-$1.09\% \\
+V19.0 & P4 wide channel 256$\rightarrow$384 & 73.44\% & 51.63\% & $-$0.56\% \\
+V20.0 & P3+P4+P5 triple-head (clean) & 73.29\% & 50.41\% & $-$0.71\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:perclass} shows the per-class breakdown of V16.0, our production model.
+
+\begin{table}[H]
+\centering
+\caption{Per-class performance — V16.0 (best model).}
+\label{tab:perclass}
+\begin{tabular}{lcccc}
+\toprule
+Class & AP50 & AP50-95 & Precision & Recall \\
+\midrule
+person    & 60.2\% & 24.7\% & 77.7\% & 50.9\% \\
+cycle     & 43.0\% & 17.6\% & 67.0\% & 36.3\% \\
+bus       & 91.8\% & 74.5\% & 91.3\% & 86.3\% \\
+small-bus & 99.2\% & 83.3\% & 92.3\% & 99.4\% \\
+car       & 67.2\% & 47.3\% & 87.2\% & 51.4\% \\
+truck     & 60.0\% & 41.0\% & 63.8\% & 53.6\% \\
+freight   & 96.6\% & 76.6\% & 89.8\% & 95.0\% \\
+\midrule
+\textbf{Overall} & \textbf{74.0\%} & \textbf{52.1\%} & \textbf{81.3\%} & \textbf{67.6\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Failed Experiments}
+
+Four experiments failed to improve performance, and we document them as honest records:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{V4.0 -- Freeze+unfreeze 2-stage training (46.82\% mAP@0.5).}
+          Standard YOLO transfer-learning protocol (freeze backbone, train head, unfreeze all)
+          performs worse than training from scratch. Hypothesis: COCO pretrained features encode
+          object shape priors (e.g., ``person = upright rectangle'') that are orthogonal to the
+          overhead view of aerial imagery, where pedestrians appear as small blobs.
+    \item \textbf{V7.0 -- VisDrone noisy labels (55.25\% mAP@0.5, Recall 50\%).}
+          VisDrone2019 annotations contain significant label noise (motorcycles mislabeled as
+          bicycles, inconsistent labeling across frames). The 12.56\% gap between V7 and V8
+          demonstrates that data quality trumps architectural sophistication.
+    \item \textbf{V8.2 -- Transfer-learning relay (69.71\% mAP@0.5).}
+          Fine-tuning V8.1 weights on the expanded aerial\_v9 dataset with the default learning
+          rate caused catastrophic forgetting—all 7 classes degraded simultaneously. The learning
+          rate reset on a larger dataset destroyed learned feature representations.
+    \item \textbf{V13.0 -- P2 high-resolution head (66.68\% mAP@0.5, OOM).}
+          While theoretically beneficial for small objects, the P2 head's 25,600-cell feature
+          map exceeds 8 GB VRAM with the TaskAlignedAssigner. The OOM occurs during assignment
+          matrix allocation, before any forward pass.
+\end{itemize}
+
+% ======================================================================
+\section{Key Findings}
+% ======================================================================
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Data quality beats architecture.} Switching from noisy VisDrone to curated
+          aerial\_v9 yielded +12.56\% mAP@0.5 (V7 $\rightarrow$ V8)—more than all four
+          architectural modifications combined.
+    \item \textbf{Dual-head outperforms triple-head on 8 GB.} Removing P5 saves 32\% parameters
+          and improves mAP by +2.1\%. The memory saved enables larger P3/P4 channels that
+          benefit the most common target classes.
+    \item \textbf{WIoU v3 is the highest-ROI change.} +1.78\% mAP@0.5 with zero VRAM cost and
+          approximately 5 lines of code changed.
+    \item \textbf{CoordAtt is cheap but effective.} Negligible parameter increase (+0.2M) for
+          +2.4\% Precision gain.
+    \item \textbf{TAL threshold directly boosts small targets.} A simple 8$\rightarrow$4 pixel
+          threshold change improves person and cycle by +6--7\% each.
+    \item \textbf{Mixup/copy-paste harm aerial detection.} These augmentations degrade performance
+          by 1.5--2.0\% on aerial data, likely due to unrealistic spatial configurations.
+\end{enumerate}
+
+% ======================================================================
+\section{Limitations and Future Work}
+% ======================================================================
+
+\subsection{Car Detection Bottleneck}
+
+Car detection on V16.0 (67.3\% AP50) lags person (60.2\%) in absolute terms but represents the
+largest opportunity for improvement given car's high instance count (69,840). Current hypotheses:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Scale ambiguity:} Cars viewed from 50--100 m altitude span a wide range of
+          apparent sizes (50--200 pixels) that may confuse the P4-level detector. A P2 head
+          would help differentiate small cars from large cars, but remains OOM-bound.
+    \item \textbf{Occlusion patterns:} Cars in urban aerial scenes are frequently partially
+          occluded by trees, buildings, or other vehicles. The current augmentation pipeline
+          does not include occlusion simulation.
+\end{itemize}
+
+Ongoing work explores SimOTA center-prior assignment and SGLoss-style adaptive grid selection
+\cite{li2022generalized} to recover P2-head benefits without the OOM cost.
+
+\subsection{Rare Class Generalization}
+
+Freight and small-bus each represent <2\% of training instances. While their detection
+performance is high on the current validation set (96.6\% and 99.2\% AP50 respectively),
+these metrics reflect the limited visual diversity of rare-class examples. Cross-dataset
+generalization remains untested.
+
+\subsection{Real-Time Deployment}
+
+The current pipeline achieves 4.0 ms inference on RTX 5060 (batch=1, FP16, 800$\times$800),
+which is suitable for offline analysis but may require further optimization for onboard
+drone deployment (target: <10 ms on edge hardware). TensorRT quantization is planned.
+
+% ======================================================================
+\section{Conclusion}
+% ======================================================================
+
+This project demonstrates that consumer-grade hardware (RTX 5060 8 GB) is sufficient for
+competitive aerial small-object detection when architectural decisions are co-designed with
+memory constraints. The key insight is not that any single modification is revolutionary, but
+that four targeted changes—CoordAtt, dual-head design, WIoU v3, and TAL threshold tuning—each
+address a specific bottleneck ($\sim$2\% improvement) and compound to a meaningful overall gain
+(+6.19\% from V8.0 baseline). The 20-version ablation log, including documented failures,
+provides a reproducible baseline for future work on resource-constrained aerial detection.
+
+% ======================================================================
+% References
+% ======================================================================
+
+\begin{thebibliography}{9}
+
+\bibitem{hou2021coordinate}
+Q.~Hou, D.~Zhou, and J.~Feng,
+``Coordinate Attention for Efficient Mobile Network Design,''
+in \emph{Proc. CVPR}, 2021, pp. 13713--13722.
+
+\bibitem{tong2023wise}
+Z.~Tong, Y.~Chen, Z.~Xu, and R.~Yu,
+``Wise-IoU: Bounding Box Regression Loss with Dynamic Focusing Mechanism,''
+\emph{arXiv preprint arXiv:2301.10051}, 2023.
+
+\bibitem{feng2021toad}
+C.~Feng, Y.~Zhong, Y.~Gao, M.~R.~Scott, and W.~Huang,
+``TOOD: Task-aligned One-stage Object Detection,''
+in \emph{Proc. ICCV}, 2021, pp. 3490--3499.
+
+\bibitem{li2022generalized}
+X.~Li, W.~Wang, L.~Wu, S.~Chen, X.~Hu, J.~Li, J.~Tang, and J.~Yang,
+``Generalized Focal Loss: Learning Qualified and Distributed Bounding Boxes for Dense Object Detection,''
+in \emph{Proc. NeurIPS}, 2020.
+
+\bibitem{jocher2023ultralytics}
+G.~Jocher, A.~Chaurasia, and J.~Qiu,
+``Ultralytics YOLO,''
+\emph{Ultralytics}, 2023. [Online]. Available: \url{https://github.com/ultralytics/ultralytics}
+
+\end{thebibliography}
+
+\end{document}

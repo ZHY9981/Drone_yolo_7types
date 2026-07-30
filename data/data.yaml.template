@@ -1,0 +1,20 @@
+# path: ./datasets/aerial_v9
+# This is a template — replace paths with your local dataset location.
+# The actual aerial_v9 dataset is not open-sourced due to license terms
+# and file size (~10 GB). See README for dataset composition details.
+
+path: ./datasets/aerial_v9          # root dataset directory
+train: images/train                  # 8,075 images
+val: images/val                      # 2,224 images
+test: images/test                    # 738 images (optional)
+
+# Classes
+nc: 7
+names:
+  0: person
+  1: cycle
+  2: bus
+  3: small-bus
+  4: car
+  5: truck
+  6: freight

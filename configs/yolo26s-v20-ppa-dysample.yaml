@@ -1,20 +1,20 @@
-# YOLO26s V20 — V16 双头 + P5 256ch CoordAtt（干净三头实验）
-# =====================================================================
-# 实验目的：想知道 P5 检测头能否在不牺牲 person/cycle 的前提下恢复 car 精度。
-# V16 双头 car=67.3% 仍偏低，V15 加回 128ch P5 未能解决问题。
-#
+# YOLO26s V20 — V16 + P5 256ch CoordAtt（干净的第三头）
+# ====================================================
 # 改动 (vs V16.0):
-#   1. 新增 P5 256ch 检测头（去掉之前实验的 DySample/PPA/C2f-DD 等副作用模块）
+#   1. 新增 P5 256ch 检测头 (去掉之前 V20 的 DySample/PPA/C2f-DD)
 #   2. P5 检测头前加 CoordAtt[32]
 #
-# 结果: mAP50=73.29%, mAP50-95=50.41%, Params=8.06M
-# 结论: 三头提升 car 约 +0.6% 但 person/cycle 各降 ~1%，双头仍是 8GB 下最优选型。
+# 设计逻辑:
+#   V16 (双头): 74.0% — person=60.2%, cycle=42.9%, car=67.3%
+#   旧V20 (三头+PPA+DySample+C2f-DD): 73.21% — 被多个模块污染
+#   新V20 用最干净的方式加 P5, 回答:
+#   "P5 256ch+CoordAtt 能否在保留 person/cycle 前提下恢复 car?"
 #
 # 继承 V16:
 #   - TAL stride=4px, class weight person×2/cycle×3 (在 loss.py 中)
 #   - WIoU v3, scale=0.3, close_mosaic=10
 #   - CoordAtt 在每检测头前独立放置
-#   - nearest 上采样（不用 DySample）
+#   - nearest 上采样 (不用 DySample)
 
 # Parameters
 nc: 7
@@ -60,7 +60,7 @@ head:
   - [-1, 2, C3k2, [512, True]]                    # 20 (P4/16-PAN)
   - [-1, 1, CoordAtt, [32]]                       # 21 ⭐ P4 CoordAtt
 
-  # --- NEW PAN: P4→P5 (256ch 版本) ---
+  # --- NEW PAN: P4→P5 (256ch 完整版) ---
   - [-1, 1, Conv, [256, 3, 2]]                    # 22 P4→P5 down (512→256ch)
   - [[-1, 10], 1, Concat, [1]]                    # 23 concat backbone P5(1024ch)
   - [-1, 2, C3k2, [512, True]]                    # 24 (P5/32-PAN fusion)
