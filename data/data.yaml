@@ -9,19 +9,10 @@
 #
 # Note: dataset is ~10 GB and not open-sourced in this repo
 # due to license terms. Contact the owner for access.
+# A 50-image val sample (CC BY 4.0 subset) is in data/val_samples/
+# so reviewers can verify detection on a small scale.
 # If you already have the dataset locally, update 'path' below.
 
-path: /path/to/aerial_v9    # ← update to your local path
+path: ./datasets/aerial_v9      # ← update to your local path
 train: train/images
-val: valid/images
-test: test/images
-
-nc: 7
-names:
-  0: person
-  1: cycle
-  2: bus
-  3: small-bus
-  4: car
-  5: truck
-  6: freight
+val: 

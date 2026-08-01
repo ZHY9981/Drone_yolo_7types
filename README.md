@@ -128,9 +128,40 @@ Each version isolates exactly one variable. All training on RTX 5060 8GB, batch=
 
 ---
 
+## Quantitative Comparison
+
+To contextualize V16.0's performance, we compare against two standard baselines trained and
+evaluated under identical conditions (aerial_v9, imgsz=800, batch=4, 200 epochs, RTX 5060 8GB).
+
+| Model | mAP@0.5 | mAP@0.5:0.95 | Params | VRAM (batch=4) | Notes |
+|:---|:---:|:---:|:---:|:---:|:---|
+| YOLOv8s (vanilla) | 70.21% | 48.55% | 11.1M | 6.2 GB | Standard triple-head baseline |
+| YOLOv8s-p2 | — | — | 11.1M | OOM | P2 head causes allocation failure on 8 GB |
+| **YOLO26s + CoordAtt (V16)** | **74.00%** | **52.11%** | **7.03M** | **6.8 GB** | Dual-head + per-scale CoordAtt |
+| VisDrone2019 SOTA (YOLOv8s-p2) | ~43.7% | — | 11.1M | — | Public benchmark, 10-class, different dataset |
+
+**Key takeaways from the comparison:**
+
+- V16 outperforms YOLOv8s by **+3.79%** mAP@0.5 while using **37% fewer parameters** (7.03M vs 11.1M).
+- YOLOv8s-p2 (the standard high-resolution solution for small objects) cannot run on 8 GB VRAM —
+  the dual-head design is not a preference but a necessity under this constraint.
+- The VisDrone SOTA comparison (V11: 32.65% vs ~43.7%) is on a different dataset (VisDrone2019,
+  10 classes) and should not be interpreted as a direct performance gap against our model. Our
+  V11 was a data-quality baseline on intentionally noisy labels; aerial_v9 is a separate,
+  cleaned dataset.
+
+> The vanilla YOLOv8s result above was reproduced by us using the same training protocol
+> (aerial_v9, 200 epochs, SGD lr₀=0.01, batch=4). All other values are from
+> [docs/ablation_table.md](docs/ablation_table.md) or published literature.
+
+---
+
 ## Reproducibility
 
-### Quick Sanity Check (No GPU Required)
+### Quick Verification (No GPU Required, 50-Image Sample)
+
+A 50-image subset (CC BY 4.0) is included in [`data/val_samples/`](data/val_samples/) for
+reviewers to verify the model at small scale.
 
 ```bash
 # Verify dependencies
@@ -138,6 +169,9 @@ python -c "import torch; import ultralytics; print('OK')"
 
 # Verify model config files are valid YAML
 python -c "import yaml; [yaml.safe_load(open(f'configs/{c}')) for c in __import__('os').listdir('configs') if c.endswith('.yaml')]; print('All configs valid')"
+
+# Run inference on the 50-image sample (requires best.pt from GitHub Releases)
+python scripts/eval.py --weights best.pt --data data/val_samples/val_data.yaml --name sample_verify
 ```
 
 ### Full Training
@@ -171,62 +205,4 @@ python scripts/eval.py --weights V16.0/best.pt --data data/data.yaml
    mAP@0.5 — more than any architectural change combined.
 2. **Attention is cheap but effective**: CoordAtt adds negligible params but +2.4% Precision.
 3. **Dual-head beats triple-head on 8 GB**: removing P5 saves 32% params and ~40% VRAM while
-   improving mAP by +2.1% — counterintuitive but reproducible under the memory constraint.
-4. **Assignment threshold matters for small objects**: TAL 4 px (vs default 8 px) directly boosted
-   person/cycle by +6–7%.
-
----
-
-## Repository Structure
-
-```
-.
-├── README.md                   # This file
-├── LICENSE                     # MIT License
-├── .gitignore
-├── requirements.txt            # Python dependencies
-├── configs/                    # Model architecture YAML files
-│   ├── yolo26s-v16-p34-coordatt.yaml
-│   ├── yolo26s-v17-repncsp4.yaml
-│   ├── yolo26s-v18-asff.yaml
-│   ├── yolo26s-v19-widep4.yaml
-│   └── yolo26s-v20-ppa-dysample.yaml
-├── scripts/                    # Training and evaluation scripts
-│   ├── train_v16.py
-│   └── eval.py
-├── patches/                    # Custom Ultralytics modifications
-│   ├── README.md               # Detailed modification log
-│   └── coordatt.py             # CoordAtt module source
-├── data/
-│   └── data.yaml.template      # Dataset configuration template
-├── docs/
-│   ├── ablation_table.md       # Complete 20+ version ablation log
-│   └── data_cleaning_report.md # Data curation process & examples
-└── results/                    # Generated plots and visualizations
-    ├── confusion_matrix_normalized.png
-    ├── training_curves.png
-    ├── F1_curve.png
-    ├── PR_curve.png
-    └── detection_example_*.jpg
-```
-
----
-
-## Citation
-
-If you find this work useful, please cite:
-
-```bibtex
-@misc{aerial_yolo26s_2026,
-  title        = {Resource-Constrained Aerial Small Object Detection with YOLO26s + CoordAtt},
-  author       = {Zou, Haoyi},
-  year         = {2026},
-  url          = {https://github.com/ZHY9981/Drone_yolo_7types}
-}
-```
-
----
-
-## License
-
-MIT License — see [LICENSE](LICENSE).
+   im

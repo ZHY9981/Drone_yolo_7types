@@ -1,0 +1,22 @@
+# Mini val set — 50 images from aerial_v9 (CC BY 4.0 subset)
+# ==========================================================
+# These 50 images are from Roboflow aerial.v1i (CC BY 4.0 license),
+# included so reviewers can verify detection performance at small scale.
+#
+# Quick check:
+#   python scripts/eval.py --weights best.pt --data data/val_data.yaml
+
+path: .
+train: images
+val: images
+test: images
+
+nc: 7
+names:
+  0: person
+  1: cycle
+  2: bus
+  3: small-bus
+  4: car
+  5: truck
+  6: freight
