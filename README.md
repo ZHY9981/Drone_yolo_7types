@@ -194,7 +194,7 @@ python scripts/train_v16.py              # ~16.6h on RTX 5060, batch=4, imgsz=80
 python scripts/eval.py --weights V16.0/best.pt --data data/data.yaml
 ```
 
-> **Model weights**: Download from [GitHub Releases](https://github.com/ZHY9981/Drone_yolo_7types/releases).
+> **Model weights**: Download from [GitHub Releases](https://github.com/ZHY9981/aerial-yolo26s/releases).
 > V16 `best.pt` is available as a release asset (~15 MB).
 
 ---
@@ -205,4 +205,66 @@ python scripts/eval.py --weights V16.0/best.pt --data data/data.yaml
    mAP@0.5 — more than any architectural change combined.
 2. **Attention is cheap but effective**: CoordAtt adds negligible params but +2.4% Precision.
 3. **Dual-head beats triple-head on 8 GB**: removing P5 saves 32% params and ~40% VRAM while
-   im
+   improving mAP by +2.1% — counterintuitive but reproducible under the memory constraint.
+4. **Assignment threshold matters for small objects**: TAL 4 px (vs default 8 px) directly boosted
+   person/cycle by +6–7%.
+
+---
+
+## Repository Structure
+
+```
+.
+├── README.md                   # This file
+├── LICENSE                     # MIT License
+├── .gitignore
+├── requirements.txt            # Python dependencies
+├── configs/                    # Model architecture YAML files
+│   ├── yolo26s-v16-p34-coordatt.yaml
+│   ├── yolo26s-v17-repncsp4.yaml
+│   ├── yolo26s-v18-asff.yaml
+│   ├── yolo26s-v19-widep4.yaml
+│   └── yolo26s-v20-ppa-dysample.yaml
+├── scripts/                    # Training and evaluation scripts
+│   ├── train_v16.py
+│   └── eval.py
+├── patches/                    # Custom Ultralytics modifications
+│   ├── README.md               # Detailed modification log
+│   └── coordatt.py             # CoordAtt module source
+├── data/
+│   ├── data.yaml.template      # Dataset configuration template
+│   └── val_samples/            # 50-image CC BY 4.0 subset for verification
+│       ├── val_data.yaml       # Mini val config
+│       ├── images/             # 50 images from aerial.v1i (CC BY 4.0)
+│       └── labels/             # Corresponding YOLO-format labels
+├── docs/
+│   ├── ablation_table.md       # Complete 20+ version ablation log
+│   └── data_cleaning_report.md # Data curation process & examples
+└── results/                    # Generated plots and visualizations
+    ├── confusion_matrix_normalized.png
+    ├── training_curves.png
+    ├── F1_curve.png
+    ├── PR_curve.png
+    └── detection_example_*.jpg
+```
+
+---
+
+## Citation
+
+If you find this work useful, please cite:
+
+```bibtex
+@misc{aerial_yolo26s_2026,
+  title        = {Resource-Constrained Aerial Small Object Detection with YOLO26s + CoordAtt},
+  author       = {Zou, Haoyi},
+  year         = {2026},
+  url          = {https://github.com/ZHY9981/aerial-yolo26s}
+}
+```
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE).

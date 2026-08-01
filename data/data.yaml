@@ -15,4 +15,15 @@
 
 path: ./datasets/aerial_v9      # ← update to your local path
 train: train/images
-val: 
+val: valid/images
+test: test/images
+
+nc: 7
+names:
+  0: person
+  1: cycle
+  2: bus
+  3: small-bus
+  4: car
+  5: truck
+  6: freight
